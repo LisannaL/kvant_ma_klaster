@@ -1,0 +1,210 @@
+---
+title: "Ettevalmistus klasteranalüüsi praktikumiks"
+author: "Indrek Soidla"
+output: 
+  html_document:
+    theme: spacelab
+    highlight: tango
+    fig_cap: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+Tehke R-s läbi mõned käesolevas failis toodud lihtsamad klasteranalüüsiga seotud operatsioonid, et praktikumis oleks juba lihtsam keskenduda praktilistele ülesannetele.
+
+Laeme kõigepealt alla vajalikud paketid.
+
+```{r}
+library(haven)
+library(dplyr)
+library(descr)
+```
+
+Laeme sisse ESS Eesti 8. laine andmed.
+
+```{r}
+ee8 <- read_sav("data/ee8.sav")
+```
+
+Eraldame alamandmestiku, kus on rahulolu tunnused.
+
+```{r}
+stf <- ee8 %>%
+  select(stflife, stfeco, stfgov, stfdem, stfedu, stfhlth)
+```
+
+# Indiviididevaheliste kauguste arvutamine
+
+Vaatame enne klasterdamise juurde minekut, kuidas R-s indiviididevahelisi kaugusi arvutada ja harjutame seda natuke, et kauguste arvutamise loogikat intuitiivselt paremini mõista, kui see Toodingu teksti põhjal veel päris selgeks ei saanud. Võtame näiteks andmestiku viis esimest indiviidi ja nende väärtused kõigepealt tunnuses `stflife`, mis on andmestikus teine tunnus.
+
+Andmestik on kahemõõtmeline ehk ridades on indiviidid ja veergudes tunnused:
+
+\--\> andmestik[read, veerg või veerud]
+
+```{r}
+stf[1:5, 1]
+
+# alternatiiv
+# stf[1:5, 'stflife']
+```
+
+Esimene indiviid on hinnanud oma rahulolu eluga üldiselt üheksa palliga, teine indiviid seitsme palliga jne.
+
+Arvutame indiviididevahelised kaugused ainult eluga rahulolu tunnuse väärtuste põhjal, kasutades funktsiooni `dist`. Nt esimese ja teise indiviidi kaugus on 2 ühikut - eelmisest tabelist näeme, et esimesel indiviidil oli väärtus 9 ja teisel väärtus 7.
+
+```{r}
+dist(stf[1:5, 1])
+```
+
+Kasutades kauguse arvutamiseks ainult ühte tunnust, saadakse kahe indiviidide vaheline kaugus lihtsalt lahutades ühe indiviidi väärtusest tunnuses teise indiviidi väärtuse.
+
+Vaatame, millised on indiviidide väärtused ka tunnuses `stfeco` (rahulolu majanduse olukorraga).
+
+```{r}
+stf[1:5, 1:2]
+
+```
+
+Arvutame indiviididevahelised eukleidilised kaugused (kaugused linnulennult) tunnuste `stflife` ja `stfeco` väärtuste põhjal. Funktsioon `dist` arvutabki **vaikimisi eukleidilised kaugused**, me ei pea seda eraldi argumendiga välja kirjutama. Argumendi `method` abil on võimalik kauguse arvutamise aluseks olevat valemit muuta.
+
+```{r}
+dist(stf[1:5, 1:2])
+```
+
+Näeme maatriksist, et esimese ja teise rea indiviidi kaugus on 3,61. See on saadud Pythagorase teoreemi rakendades - kui arvutame selle alloleva lahtikirjutuse põhjal, saame täpselt sama vastuse.
+
+$d = \sqrt{(9-7)^2 + (7-4)^2} = `r sqrt((9-7)^2 + (7-4)^2) %>% round(2)`$
+
+Sama põhimõtte järgi käib kauguste arvutamine ka suurema hulga tunnuste puhul:
+
+```{r}
+stf[1:5, 1:6] # väärtused
+
+dist(stf[1:5, 1:6]) # kaugused
+```
+
+Esimese ja teise indiviidi vahelise eukleidilise kauguse arvutustehe kuue tunnuse lõikes:
+
+$d = \sqrt{(9-7)^2 + (7-4)^2 + (4-2)^2 + (7-2)^2 + (6-8)^2 + (7-6)^2} = `r sqrt((9-7)^2 + (7-4)^2 + (4-2)^2 + (7-2)^2 + (6-8)^2 + (7-6)^2) %>% round(2)`$
+
+Funktsioon `dist` võimaldab ka teist liiki kauguste arvutamist, nt **Manhattani ehk linnakaugust**: vt käsku küsimärgiga funktsiooni nimetuse ees: `?dist`
+
+```{r}
+?dist
+```
+
+Nt linnakaugused:
+
+```{r}
+stf[1:5, 1:6]
+
+dist(stf[1:5, 1:6], method = "manhattan")
+```
+
+Näeme näiteks, et esimese ja teise indiviid kauguste vahe on 15 palli, mis on lihtsalt kahe indiviidi väärtuste erinevused kõigis tunnustes.
+
+Mille alusel arvutab kaugused `method = "maximum"`? Kirjuta ise vastav käsk ja püüa tulemuse põhjal ära arvata.
+
+```{r}
+dist(stf[1:5, 1:6], method = "maximum")
+```
+
+Nt on suurim erinevus esimese ja teise indiviidi väärtustes. Esimese ja teise indiviidi puhul eluga rahulolu tunnuses on erinevus 2 palli, majandusega rahulolu puhul 3 jne, aga demokraatiaga rahulolu puhul on erinevus 5 palli, mis on ka maksimaalne erinevus ,seega on see väärtus võetud ka kauguse arvutamise aluseks.
+
+Eelnevad näited olid arvuliste tunnuste alusel. Dihhotoomsete tunnuste alusel saab arvutada kauguse/läheduse kokkulangevate väärtuse osakaalu põhjal tunnustes. Toodingu raamatust lugesite, et on olemas erinevaid kauguse ja läheduse arvutamise meetodeid.
+
+Proovime ka **Jaccardi kauguste** arvutamist, selleks võtame analoogselt Toodingu õpikus toodud näitega kaheväärtuselised tunnused, kus on andmed selle kohta, kas vastaja on olnud viimase 12 kuu jooksul erinevatel viisidel ühiskondlikult aktiivne (ankeedis B15-B22). Funktsioon `dist` eeldab, et tunnustes on nullid ja ühed, meil on ühed ja kahed, muudame selle ümber.
+
+```{r}
+plt <- ee8 %>%
+  select(contplt, wrkprty, wrkorg, badge, sgnptit, pbldmn, bctprd, pstplonl)
+
+plt[plt == 2] <- 0 # väärtusele 2 omistame uue väärtuse 0
+
+plt[1:15,] # vaatame väärtuseid
+
+# arvutame kaugused
+plt[1:15,] %>%
+  dist(method = "binary") %>%
+  round(2) # ümardame väärtused
+```
+
+Saadud kauguste maatriksis on väga vähe eristuvaid kauguste väärtusi. See on binaarsete tunnuste puhul kauguste arvutamisel tavaline, sest neis tunnustes on üldse väga vähe erinevaid väärtusi. Ilmekamalt näitab seda kauguste sagedusjaotuste tabel.
+
+```{r}
+plt[1:15,] %>%
+  dist(method = "binary") %>%
+  round(2) %>%
+  freq()
+```
+
+Dihhotoomsete tunnuste põhjal saab kaugusi arvutada, aga kui palju neist on kasu, oleneb tunnustest. Antud näite puhul oli näiteks 1-väärtusi suhteliselt vähe, sest enamasti inimesed ei ole poliitikuga ühendust võtnud jms.
+
+## Hierarhiline klasteranalüüs
+
+Teeme harjutuseks läbi Toodingu raamatus olevad näited ja vaatame, kuidas vastavad klasterdused näevad välja liigituspuul.
+
+Kõigepealt teeme näiteandmestiku (`naide`), mis koosneb kahest vektorist (`hotisontaalne`, `vertikaalne`).
+
+```{r}
+horisontaalne <- c(1:6)
+vertikaalne <- c(4, 3, 1, 3, 5, 3)
+naide <- data.frame(horisontaalne, vertikaalne)
+rownames(naide) <- c("A", "B", "C", "D", "E", "F")
+knitr::kable(naide)
+```
+
+Arvutame kaugused.
+
+```{r}
+d <- dist(naide)
+d
+```
+
+Kõik Toodingu õpikus kasutatud hierarhilised klasterdusmeetodid on R-s kasutatavad funktsiooniga `hclust`, meetodi saab täpsustada argumendiga `method`.
+
+Kasutame ühe seose meetodit (*single linkage*). Toodingu õpikus lk 379.
+
+```{r fig.cap = "Joonis 1. Hierarhiline klasteranalüüs näiteandmestiku põhjal: klasterduspuu ühe seose meetodil."}
+# Kokkuvõte klasterdusest
+hclust(d, method = "single")
+
+# Teeme klasterduspuu
+hclust(d, method = "single") %>% 
+  plot()
+```
+
+<br>
+
+Klasterdus täieliku seose meetodil (Toodingu õpikus lk 380):
+
+```{r fig.cap = "Joonis 2. Hierarhiline klasteranalüüs näiteandmestiku põhjal: klasterduspuu täieliku seose meetodil."}
+hclust(d, method = "complete") %>%
+  plot()
+```
+
+<br>
+
+Klasterdus keskmise kauguse meetodil:
+
+```{r fig.cap = "Joonis 3. Hierarhiline klasteranalüüs näiteandmestiku põhjal: klasterduspuu keskmise kauguse meetodil."}
+hclust(d, method = "average") %>%
+  plot()
+```
+
+<br>
+
+Klasterdus Wardi meetodil:
+
+```{r fig.cap = "Joonis 4. Hierarhiline klasteranalüüs näiteandmestiku põhjal: klasterduspuu Wardi meetodil."}
+hclust(d, method = "ward.D2") %>%
+  plot()
+```
+
+<br>
+
+Nagu näha, suuri erinevusi antud näite puhul eri klasterdusmeetodite puhul ei ilmnenud, välja arvatud ühe seose meetodi puhul. Rohkemate indiviidide ja tunnuste puhul võivad erinevused siiski olla märkimisväärsed.
+
+See ongi enne praktikumi kõik. Sisulisemate ülesannete juurde läheme praktikumis, siin toodud materjal oli tarvis eelnevalt läbi käia, et oleksite osade käskudega R-s juba tuttavad ja praktikumis läheksid asjad juba kiiremini.
