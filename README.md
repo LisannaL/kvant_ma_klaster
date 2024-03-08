@@ -1,2 +1,5 @@
-# kvant_ma_klaster
-Sotsiaalse analüüsi meetodid: klasteranalüüs
+# Sotsiaalse analüüsi meetodid: kvantitatiivne lähenemine (SVUH.00.087)
+## Klasteranalüüs
+
+
+Materjalid saab alla laadida rohelisest nupust Code => Download ZIP, GitHubi kasutajad võivad endale teha ka koopia.
