@@ -41,7 +41,7 @@ Vaatame enne klasterdamise juurde minekut, kuidas R-s indiviididevahelisi kaugus
 
 Andmestik on kahemõõtmeline ehk ridades on indiviidid ja veergudes tunnused:
 
-\--\> andmestik[read, veerg või veerud]
+--\> andmestik[read, veerg või veerud]
 
 ```{r}
 stf[1:5, 1]
@@ -73,7 +73,7 @@ Arvutame indiviididevahelised eukleidilised kaugused (kaugused linnulennult) tun
 dist(stf[1:5, 1:2])
 ```
 
-Näeme maatriksist, et esimese ja teise rea indiviidi kaugus on 3,61. See on saadud Pythagorase teoreemi rakendades - kui arvutame selle alloleva lahtikirjutuse põhjal, saame täpselt sama vastuse.
+Näeme maatriksist, et esimese ja teise rea indiviidi kaugus on \~3,61. See on saadud Pythagorase teoreemi rakendades - kui arvutame selle alloleva lahtikirjutuse põhjal, saame täpselt sama vastuse.
 
 $d = \sqrt{(9-7)^2 + (7-4)^2} = `r sqrt((9-7)^2 + (7-4)^2) %>% round(2)`$
 
@@ -111,7 +111,7 @@ Mille alusel arvutab kaugused `method = "maximum"`? Kirjuta ise vastav käsk ja 
 dist(stf[1:5, 1:6], method = "maximum")
 ```
 
-Nt on suurim erinevus esimese ja teise indiviidi väärtustes. Esimese ja teise indiviidi puhul eluga rahulolu tunnuses on erinevus 2 palli, majandusega rahulolu puhul 3 jne, aga demokraatiaga rahulolu puhul on erinevus 5 palli, mis on ka maksimaalne erinevus ,seega on see väärtus võetud ka kauguse arvutamise aluseks.
+Nt on suurim erinevus esimese ja teise indiviidi väärtustes. Esimese ja teise indiviidi puhul eluga rahulolu tunnuses on erinevus 2 palli, majandusega rahulolu puhul 3 jne, aga demokraatiaga rahulolu puhul on erinevus 5 palli, mis on ka maksimaalne erinevus, seega on see väärtus võetud ka kauguse arvutamise aluseks.
 
 Eelnevad näited olid arvuliste tunnuste alusel. Dihhotoomsete tunnuste alusel saab arvutada kauguse/läheduse kokkulangevate väärtuse osakaalu põhjal tunnustes. Toodingu raamatust lugesite, et on olemas erinevaid kauguse ja läheduse arvutamise meetodeid.
 
@@ -131,7 +131,7 @@ plt[1:15,] %>%
   round(2) # ümardame väärtused
 ```
 
-Saadud kauguste maatriksis on väga vähe eristuvaid kauguste väärtusi. See on binaarsete tunnuste puhul kauguste arvutamisel tavaline, sest neis tunnustes on üldse väga vähe erinevaid väärtusi. Ilmekamalt näitab seda kauguste sagedusjaotuste tabel.
+Näeme, et paljudel indiviididel on kaugused kas 1 või 0. Saadud kauguste maatriksis on väga vähe eristuvaid kauguste väärtusi. See on binaarsete tunnuste puhul kauguste arvutamisel tavaline, sest neis tunnustes on üldse väga vähe erinevaid väärtusi. Ilmekamalt näitab seda kauguste sagedusjaotuste tabel.
 
 ```{r}
 plt[1:15,] %>%
@@ -140,7 +140,7 @@ plt[1:15,] %>%
   freq()
 ```
 
-Dihhotoomsete tunnuste põhjal saab kaugusi arvutada, aga kui palju neist on kasu, oleneb tunnustest. Antud näite puhul oli näiteks 1-väärtusi suhteliselt vähe, sest enamasti inimesed ei ole poliitikuga ühendust võtnud jms.
+Dihhotoomsete tunnuste põhjal saab kaugusi arvutada, aga kui palju neist on kasu, oleneb tunnustest. Antud näite puhul oli näiteks tunnustes 1-väärtusi suhteliselt vähe, sest enamasti inimesed ei ole poliitikuga ühendust võtnud jms.
 
 ## Hierarhiline klasteranalüüs
 
