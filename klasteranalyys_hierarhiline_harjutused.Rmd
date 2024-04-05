@@ -1,0 +1,387 @@
+---
+title: "Klasteranalüüsi praktikum"
+output: 
+  html_document:
+    css: styles.css
+    theme: spacelab
+    highlight: tango
+    fig_cap: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+Laeme sisse vajalikud paketid.
+
+```{r}
+library(knitr)
+library(dplyr)
+library(kableExtra)
+library(reshape2)
+library(ggplot2) 
+library(data.table)
+library(dendextend)
+library(factoextra)
+```
+
+# Hierarhiline klasteranalüüs
+
+Hierarhiline klasterdus on klastrite moodustamise meetod, mille käigus objektid on organiseeritud puutaoliseks struktuuriks e. dendrogrammiks. Hierarhilise klasterduse põhiidee on alustada igast objektist eraldi klastrina ja seejärel kombineerida need iteratiivselt suuremateks klastriteks nende sarnasuse alusel ehk [samm-sammult hakatakse omavahel kokku panema kõige sarnasemaid objekte]{.underline}. Meid ei huvita ei alg- ega lõppseis vaid kogu küsimus peitub selles, et [leida nn optimaalne klastrite arv]{.underline}.
+
+On kahte peamist tüüpi: ühendavad (*agglomerative*) ja lahutavad (*divisible*).
+
+-   **Ühendav** - nn [alt-üles meetod]{.underline}, esimesel sammul (hierarhia esimesel tasemel) on iga objekt omaette klaster ja viimasel sammul (hierarhia viimasel tasemel) moodustavad kõik objektid ühise klastri. Igal hierarhia tasemel tehakse üks liigutus klastrite ühendamiseks teatud printsiibi kohaselt. Igal sammul (esimene välja arvatud) on eelmine klasterdus käesoleva klasterduse teatav liigendus. Analoogiliselt on iga klasterdus (viimane välja arvatud) omakorda järgneva teatav liigendus.
+
+    -   Tänases praktikumis kasutusel olev meetod. Võimalikud funktsioonid: `hclust` (paketist `stats`), `agnes` (paketist `cluster`).
+
+    -   Üldiselt arvutuslikult kallim meetod, eriti suuremate andmestike puhul. See lähenemisviis nõuab kõigi andmepunktide vahekauguste paarikaupa arvutamist, mis võib olla arvutuslikult kulukas.
+
+    -   Saab paremini hakkama erinditega, kuna neid saab lisada suurematesse klastritesse.
+
+-   **Lahutavad** - esimesel sammul on kõik objektid ühises klastris ja viimases igaüks eraldi. Tegevus igal sammul tähendab ühe klastri lahutamist. Millised klastrid konkreetsel sammul teisenevad, see oleneb klastritevahelise kauguse valikust, mis omakorda määrab klasterdusmeetodi.
+
+    -   Funktsioon `diana` paketist `cluster`.
+
+    -   Arvutuslikult odavam, kuna klastrite loomine nõuab ainult alamklastrite vaheliste kauguste arvutamist.
+
+    -   Võib luua alamklastreid erindite ümber, mis jällegi võib kaasa tuua ebaoptimaalsed klastrid.
+
+Meeldetuletuseks: [erinevad ühendusmeetodid](https://samm.ut.ee/sissejuhatus-klasteranal%C3%BC%C3%BCsi).
+
+# Klasteranalüüsi näide
+
+> Laadige R-i majandusvabaduse indeksi andmestik (kaustas `data/`). Viige [majandusvabaduse indeks](https://www.heritage.org/index/)i aluseks olevate tunnustega (veerud 6-17) läbi hierarhiline klasteranalüüs erinevate meetoditega. **Kontrollige eelnevalt, kas tunnuseid oleks vaja standardiseerida.** (Standardiseerimist oleme käsitlenud esimesel nädalal erindite teema all, kus väärtuste erandlikkuse hindamiseks arvutasime z-skoorid.) Z-skooride arvutamiseks saab R-s kasutada käsku `scale` (vaja on ainult ühte argumenti). **Võrrelge tulemusi** - millised annavad kompaktseima või sisuliselt paremini tõlgendatava tulemuse? Milliste riikidega kokku kuulub Eesti? Kas see tundub sisuliselt loogiline?
+
+## 1. Andmed
+
+Loeme andmed sisse.
+
+```{r}
+econ <- read.csv2("data/econfreedom2.csv")
+```
+
+Vaatame, millised andmed andmestikus on.
+
+Funktsioonid `kable`, `kable_styling` ja `scroll_box` on lisatud lihtsalt Rmarkdowniga loodud html-failis andmestiku lugejasõbralikumaks vormindamiseks.
+
+```{r, class.output="scroll-100"}
+econ %>% 
+  kable(caption = "Tabel 1. Majandusvabaduse näitajad riigiti. Andmed: Heritage Foundation 2021.") %>%
+  kable_styling("striped") %>% 
+  scroll_box(height = "500px", width = "100%")
+```
+
+Andmestikus on meil riik, mis regiooni nad kuuluvad, järjekorra number maailmas, järjekorra number oma regioonis, majandusvabaduse indeks ja seejärel tunnused, mille põhjal on indeks koostatud.
+
+Kontrollime ka, kui suur on andmelünkadega riikide osakaal andmestikus.
+
+```{r}
+# ridade arv andmestikus
+nrow(econ)
+
+# ridade arv andmestikus, kui eemaldada read puuduvate väärtustega
+nrow(na.omit(econ))
+
+# puuduvate väärtusteta ridade osakaal
+nrow(na.omit(econ)) / nrow(econ)
+```
+
+Neid ei ole palju, aga enne andmelünkadega riikide eemaldamist oleks hea vaadata, kas need vähesed riigid on mingi juhuslik kogum kõigist riikidest või kuidagi erandlik.
+
+```{r}
+econ %>% 
+  subset(!complete.cases(econ)) %>% # riigid, kus ei ole täielikud andmed
+  pull(Country.Name)
+```
+
+Praktiliselt kõik need riigid on suuremal või vähemal määral sõjas. Seega pole tegu juhusliku valikuga riikidest, samas on selliste riikide puhul majandusvabadus teatud objektiivsetel asjaoludel tõsiselt häiritud ning nad ei ole niikuinii teiste riikidega samadel alustel võrreldavad.
+
+Eemaldame andmelünkadega riigid.
+
+```{r}
+econ <- na.omit(econ)
+```
+
+Uurime tunnuste jaotuseid, et hinnata, kas tunnuseid oleks vaja standardiseerida. Standardiseerimine puudutab näiteks seda, et kas tunnused on erinevatel skaaladel või milline on tunnuste hajuvus.
+
+`psych::describe` esitab kokkuvõtlikult mitmed näitajad tunnuste kohta:
+
+```{r}
+psych::describe(econ[6:17])
+```
+
+**Mida eelnevast tabelist välja loete? Tunnused võiks standardiseerida, aga miks? Mida saame öelda tunnuste skaala ja hajuvuse kohta?**
+
+## 2. Standardiseerimine
+
+Viime läbi standardiseerimise (arvutame z-skoorid) funktsiooniga `scale`.
+
+Vaatame jaotusparameetreid:
+
+```{r}
+# teeme eraldi objekti tunnuste standardiseerimise jaoks
+econ_st <- data.table::copy(econ)
+
+# standardiseeritavad tunnused (arvulised)
+econ_st[6:17] <- scale(econ[6:17])
+
+psych::describe(econ_st[6:17])
+```
+
+## 3. Kauguste arvutamine
+
+Arvutame kauguste maatriksi, enne seda lisame riikide nimed reanimedeks, et hiljem oleks ka klasterduspuudel riikide nimed.
+
+```{r}
+rownames(econ_st) <- econ_st$Country.Name
+d <- stats::dist(econ_st[6:17])
+```
+
+## 4. Klasterduspuud
+
+Kui kaugused on arvutatud, siis järgmine samm on klasterduspuude tegemine.
+
+### **Ühe seose meetod**
+
+Kaugus kahe klastri vahel on nende klastrite [lähimate elementide vaheline kaugus]{.underline}. Omavahel ühendatakse kõigi võimalike klastripaaride seast need klastrid, mille lähimad elemendid on teineteisele kõige lähemal. Praktikas on meetodile sageli omane [ahelaefekt]{.underline}: objekte lisatakse järjest olemasolevatesse klastritesse juurde ja uut klastrit alustatakse vastumeelselt.
+
+```{r fig.cap = "Joonis 1. Riikide klasterdus majandusvabadust kajastavate tunnuste alusel: klasterduspuu ühe seose meetodil."}
+hclust(d, method = "single") %>%
+  plot(cex = 0.5) # argumendiga cex saab x-teljel kirjasuurust määrata
+```
+
+### **Täieliku seose meetod**
+
+Kaugus kahe klastri vahel on nende [klastrite kaugeimate elementide vaheline kaugus]{.underline}. Omavahel ühendatakse kõigi võimalike klastripaaride seast need klastrid, mille kaugeimad elemendid on teineteisele kõige lähemal. Täieliku seose meetod arvestab ka objektide paigutust klastri sees ja seega kasutab ära klastrite ühendamisel konkreetsel sammul rohkem teavet kui ühe seose meetod.
+
+```{r fig.cap = "Joonis 2. Riikide klasterdus majandusvabadust kajastavate tunnuste alusel: klasterduspuu täieliku seose meetodil."}
+hclust(d, method = "complete") %>%
+  plot(cex = 0.5)
+```
+
+### **Klastritevahelise keskmise kauguse meetod**
+
+Kahe klastri vaheliseks [kauguseks loetakse keskmine kaugus kõigis objektipaarides]{.underline}, mil üks paariline kuulub ühte ja teine teise klastrisse. Omavahel ühendatakse need klastrid, mille puhul selline keskmine kaugus on vähim.
+
+```{r fig.cap = "Joonis 3. Riikide klasterdus majandusvabadust kajastavate tunnuste alusel: klasterduspuu keskmise kauguse meetodil."}
+hclust(d, method = "average") %>%
+  plot(cex = 0.5)
+```
+
+### **Wardi meetod**
+
+Wardi meetod on kujunenud praktikas hierarhilistest klasterdusmeetoditest soosituimaks ja seda peetakse heaks klastrite äratundjaks. Meetod erineb eelnevalt kirjeldatuist ja toetub klastreis arvutatud summaarsetele ruuthälvetele klastrikeskmise suhtes (klastrikeskmise määravad klasterdustunnuste keskmised). [Omavahel ühendatakse need klastrid, mille puhul summaarse ruuthälbe kasv ühendklastris võrreldes klastritesiseste summaarsete ruuthälvete summaga on vähim.]{.underline} Wardi meetod eelistab omavahel ühendada lähendaste klastrikeskmistega klastreid. Kauguseks selle meetodi korral võetakse eukleidiline ruutkaugus (toetub ruuthälbeile).
+
+```{r fig.cap = "Joonis 4. Riikide klasterdus majandusvabadust kajastavate tunnuste alusel: klasterduspuu Wardi meetodil."}
+hclust(d, method = "ward.D2") %>%
+  plot(cex = 0.5) 
+```
+
+## 5. Tutvume klastritega
+
+Uurime klastreid lähemalt. Loome klastrikuuluvuse tunnuse `ward4` funktsiooniga `cutree`, millega anname R-le teada, et soovime nelja klastrit. Iga riik saab väärtuse oma klastrikuuluvuse kohta.
+
+```{r}
+econ_st$ward4 <- hclust(d, method = "ward.D2") %>% 
+  cutree(4)
+```
+
+Vaatame, millisesse klastrisse kuulub Eesti.
+
+```{r}
+econ_st %>% 
+  subset(Country.Name == "Estonia") %>% 
+  pull(ward4)
+```
+
+Millises seltskonnas me oma majandusvabaduse näitajate poolest oleme?
+
+```{r}
+econ_st %>% 
+  subset(ward4 == 3) %>% 
+  pull(Country.Name)
+```
+
+Pole paha. Tundub, et heas (st parimas võimalikus) seltskonnas, aga kontrollime järele. Millised on nendes neljas klastris indeksi keskmised väärtused ja järjekorra numbri mediaan väärtus?
+
+```{r}
+econ_st %>%
+  group_by(ward4) %>%
+  summarise(indeksi_keskm = mean(X2021.Score), 
+            jrjk_mediaan = median(World.Rank))
+```
+
+Peab paika. Millised riigid moodustavad siis omaette ülejäänud klastrid?
+
+```{r}
+print('1.klaster:')
+econ_st %>% 
+  subset(ward4 == 1) %>% 
+  pull(Country.Name)
+
+print('2.klaster:')
+econ_st %>% 
+  subset(ward4 == 2) %>% 
+  pull(Country.Name)
+
+print('4.klaster:')
+econ_st %>% 
+  subset(ward4 == 4) %>% 
+  pull(Country.Name)
+```
+
+Vaatame ka joonisel, kuidas klastrid eristuvad.
+
+```{r}
+ggplot(econ_st, 
+       aes(x = Business.Freedom, y = Labor.Freedom, 
+           label = Country.Name, 
+           colour = as.factor(ward4))) +
+   geom_point() +
+   geom_text(size = 3, nudge_x = 0.01)
+```
+
+```{r}
+ggplot(econ_st, 
+       aes(x = Tax.Burden, y = Government.Integrity, 
+           label = Country.Name, 
+           colour = as.factor(ward4))) +
+   geom_point() +
+   geom_text(size = 3, nudge_x = 0.01)
+```
+
+Samuti saame visualiseerida, kuidas tekkinud grupid eristuvad üksteisest klasterduse aluseks olevate tunnuste poolest. Esitame nt klasterduse aluseks olevate tunnuste keskmised klastrites.
+
+```{r}
+klast_keskm <- econ_st %>% 
+  group_by(ward4) %>% 
+  summarise(Tax.Burden = mean(Tax.Burden), 
+            Government.Integrity = mean(Government.Integrity), 
+            Labor.Freedom = mean(Labor.Freedom)) %>% 
+  as.data.frame()
+
+klast_keskm <- melt(klast_keskm, id.vars = "ward4",
+                    measure.vars = c("Tax.Burden", "Government.Integrity", "Labor.Freedom"))
+
+ggplot() +
+  geom_col(data = klast_keskm,
+           aes(x = variable, y = value, fill = as.factor(ward4)),
+           position = "dodge2")
+
+```
+
+Kõik tunnused joonisel.
+
+```{r}
+averages <- econ_st %>%
+  group_by(ward4) %>%
+  summarise(across(names(econ_st)[6:17], mean, na.rm = TRUE)) %>%
+  as.data.frame()
+
+averages <- melt(averages, id.vars = "ward4",
+                    measure.vars = names(averages)[2:13])
+
+ggplot() +
+  geom_col(data = averages,
+           aes(x = variable, y = value, fill = as.factor(ward4)),
+           position = "dodge2") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## 6. Võimalusi klasterduspuude visualiseerimiseks
+
+```{r}
+hclust_ward <- hclust(d, method = "ward.D2")
+```
+
+```{r}
+fviz_dend(hclust_ward, # clustering result
+          k = 4, # cluster number
+          cex = 0.5, 
+          color_labels_by_k = TRUE, 
+          rect = TRUE )
+```
+
+```{r}
+plot(hclust_ward, cex = 0.6)
+rect.hclust(hclust_ward, k = 4, border = 2:5)
+```
+
+```{r}
+dend <- hclust_ward %>% 
+  as.dendrogram %>% 
+  hang.dendrogram
+
+dend %>% 
+  color_branches(k=4) %>% 
+  color_labels(k=4) %>% 
+  plot
+```
+
+```{r}
+dend %>% 
+  # Custom branches
+  set("branches_col", "grey") %>% set("branches_lwd", 1.8) %>%
+  # Custom labels
+  set("labels_col", "orange") %>% set("labels_cex", 0.7) %>%
+  plot()
+```
+
+```{r}
+# Color in function of the cluster
+#par(mar=c(1,1,1,7))
+dend %>%
+  set("labels_col", 
+      value = c("skyblue", "orange", "grey", 'lightgreen'), k=4) %>%
+  set("branches_k_color", 
+      value = c("skyblue", "orange", "grey", 'lightgreen'), k = 4) %>%
+  plot(horiz=F, axes=FALSE)
+```
+
+```{r}
+dend %>% 
+  set("labels_col", k=4) %>% 
+  plot()
+```
+
+Vt veel [siit](http://www.sthda.com/english/wiki/beautiful-dendrogram-visualizations-in-r-5-must-known-methods-unsupervised-machine-learning).
+
+# Harjutus 1
+
+> Eraldage Euroopa riikide andmed. Viige läbi klasterdamine Wardi meetodil. Eelnevalt tunnuseid juba standardiseerisime, aga kas Euroopa riikide omaette uurides oleks standardiseerimist vaja? Kas piisaks enne tehtud standardiseerimisest või oleks mõttekas Euroopa riike standardiseerida kui omaette kogumit? Kas näete klasterstruktuuris mingit loogilist mustrit? Kas Eesti grupikuuluvus tundub loogiline? Milliste riikidega on Eesti kõige sarnasem?
+
+Võtame vaatluse alla Euroopa.
+
+```{r}
+econ_eur <- econ %>%
+  subset(Region == "Europe")
+```
+
+Veendume, et Euroopa riikide eraldamine töötas.
+
+```{r}
+econ_eur$Country.Name
+```
+
+```{r}
+
+```
+
+# Harjutus 2
+
+> Jätkame Euroopa andmetega, võtame aluseks viiese klasterduse. Kas klasterdus andis õieti midagi juurde juba koostatud indeksile? Mille alusel saaks seda hinnata?
+
+Siin oleks kõige lihtsam vaadata, kui järjestame riigid majandusvabaduse indeksi alusel, siis kas samades klastrites olevad riigid on järjestikku või esinevad nad järjekorras mingil määral läbisegi. Esimesel juhul annaks klasterdus sama tulemuse, mis majandusvabaduse indeks, teisel juhul võib klasterdus viidata mingile lisainfole selle kohta, kas mingid riigid on teatud dimensioonides sarnasemad, olgugi et keskmiselt võivad nad indeksi alusel paista samal majandusvabaduse tasemel olevat.
+
+```{r}
+
+```
+
+# Harjutus 3
+
+> Jagades riigid viiese klasterduse alusel, uurige lähemalt gruppi, kuhu kuulub Eesti, st uurige 12 tunnuse väärtusi nende riikide lõikes. Mille poolest sarnaneb Eesti enamikule oma grupi riikidele kõige rohkem? Kus on suurimad erinevused? Eestile sarnaseim riik peaks klasterduse järgi olema Luksemburg - milliste tunnuste põhjal on sarnasus suurim, kas mingite tunnuste poolest leidub olulisi erinevusi?
+
+```{r}
+
+```
